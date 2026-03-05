@@ -1,0 +1,34 @@
+# macOS
+.DS_Store
+*.swp
+*~
+
+# Xcode
+PolymarketClone/build/
+PolymarketClone/DerivedData/
+PolymarketClone/*.xcodeproj/xcuserdata/
+PolymarketClone/*.xcodeproj/project.xcworkspace/xcuserdata/
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+*.xccheckout
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Secrets (Privy keys, API keys)
+PolymarketClone/PolymarketClone/Secrets.xcconfig
+
+# Swift Package Manager
+PolymarketClone/.build/
+PolymarketClone/.swiftpm/
+
+# IDE
+.vscode/
+.idea/
+
+# Claude Code
+.claude/
