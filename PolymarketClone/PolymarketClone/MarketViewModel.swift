@@ -209,6 +209,19 @@ class MarketViewModel: ObservableObject {
             contract: ctfContract
         )
 
+        // 3. Tell the CLOB to refresh its cached balance/allowance state
+        try await ClobService.shared.updateBalanceAllowance(
+            wallet: wallet,
+            assetType: "COLLATERAL"
+        )
+        try await ClobService.shared.updateBalanceAllowance(
+            wallet: wallet,
+            assetType: "CONDITIONAL",
+            tokenId: tokenId
+        )
+        // Brief delay to let the CLOB process the balance/allowance update
+        try await Task.sleep(nanoseconds: 1_000_000_000)
+
         let result = try await TradingService.shared.placeOrder(
             wallet: wallet,
             conditionId: conditionId,
@@ -275,6 +288,17 @@ class MarketViewModel: ObservableObject {
             wallet: wallet,
             operator: negRiskAdapter,
             contract: ctfContract
+        )
+
+        // Tell the CLOB to refresh its cached balance/allowance state
+        try await ClobService.shared.updateBalanceAllowance(
+            wallet: wallet,
+            assetType: "COLLATERAL"
+        )
+        try await ClobService.shared.updateBalanceAllowance(
+            wallet: wallet,
+            assetType: "CONDITIONAL",
+            tokenId: tokenId
         )
 
         // For selling, we place a SELL order on the CLOB

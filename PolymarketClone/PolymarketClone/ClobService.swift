@@ -55,6 +55,8 @@ class ClobService {
     // Contract addresses
     private let ctfExchange = "0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E"
     private let negRiskExchange = "0xC5d563A36AE78145C45a50134d48A1215220f80a"
+    private let usdcAddress = "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174"
+    private let ctfContract = "0x4D97DCd97eC945f40cF65F87097ACe5EA0476045"
 
     // MARK: - Server Time
 
@@ -338,12 +340,13 @@ class ClobService {
                 "signatureType": 0,
                 "signature": orderSignature
             ],
-            "owner": creds.apiKey,  // Required! Missing before
+            "owner": creds.apiKey,
             "orderType": orderType
         ]
 
         let bodyData = try JSONSerialization.data(withJSONObject: orderBody, options: [.sortedKeys])
         let bodyString = String(data: bodyData, encoding: .utf8)!
+        print("[CLOB] Order request body: \(bodyString)")
 
         // Build L2 HMAC headers
         let headers = buildL2Headers(
@@ -364,23 +367,96 @@ class ClobService {
         }
         request.httpBody = bodyData
 
+        // Retry loop: CLOB may return 425 "service not ready" after balance/allowance update
+        var lastError: Error = ClobError.invalidResponse
+        for attempt in 0..<3 {
+            if attempt > 0 {
+                print("[CLOB] Retrying order (attempt \(attempt + 1))...")
+                try await Task.sleep(nanoseconds: 2_000_000_000) // 2 seconds
+            }
+
+            let (data, response) = try await URLSession.shared.data(for: request)
+            let httpResponse = response as? HTTPURLResponse
+            let statusCode = httpResponse?.statusCode ?? 0
+
+            let rawResponse = String(data: data, encoding: .utf8) ?? ""
+            print("[CLOB] Order response (\(statusCode)): \(rawResponse)")
+
+            // Handle non-JSON responses (e.g. 425 "service not ready")
+            guard let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
+                if statusCode == 425 {
+                    lastError = ClobError.orderFailed("Service not ready, retrying...")
+                    continue
+                }
+                throw ClobError.orderFailed(rawResponse.isEmpty ? "Invalid response" : rawResponse)
+            }
+
+            if statusCode != 200 {
+                let errorMsg = json["error"] as? String ?? json["errorMsg"] as? String ?? json["message"] as? String ?? "Order failed"
+                if statusCode == 425 {
+                    lastError = ClobError.orderFailed(errorMsg)
+                    continue
+                }
+                throw ClobError.orderFailed(errorMsg)
+            }
+
+            // Check for error message even in 200 responses
+            if let errorMsg = json["error"] as? String ?? json["errorMsg"] as? String, !errorMsg.isEmpty {
+                throw ClobError.orderFailed(errorMsg)
+            }
+
+            let success = json["success"] as? Bool ?? (json["orderID"] != nil)
+            let status = json["status"] as? String
+
+            if json["success"] as? Bool == false {
+                throw ClobError.orderFailed(status ?? "Order was not accepted")
+            }
+
+            return PlaceOrderResult(
+                success: success,
+                orderId: json["orderID"] as? String,
+                status: status
+            )
+        }
+
+        throw lastError
+    }
+
+    // MARK: - Update Balance/Allowance Cache
+
+    /// Tell the CLOB to refresh its cached view of the user's on-chain balance/allowance.
+    /// Must be called after on-chain approvals and before placing orders.
+    func updateBalanceAllowance(
+        wallet: EmbeddedEthereumWallet,
+        assetType: String,   // "COLLATERAL" or "CONDITIONAL"
+        tokenId: String? = nil
+    ) async throws {
+        let creds = try await deriveApiKeys(wallet: wallet)
+        let address = wallet.address
+
+        var urlString = "\(clobHost)/balance-allowance/update?asset_type=\(assetType)&signature_type=0"
+        if let tokenId = tokenId {
+            urlString += "&token_id=\(tokenId)"
+        }
+
+        let headers = buildL2Headers(
+            creds: creds,
+            address: address,
+            method: "GET",
+            path: "/balance-allowance/update"
+        )
+
+        let url = URL(string: urlString)!
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        for (key, value) in headers {
+            request.addValue(value, forHTTPHeaderField: key)
+        }
+
         let (data, response) = try await URLSession.shared.data(for: request)
         let httpResponse = response as? HTTPURLResponse
-
-        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            throw ClobError.invalidResponse
-        }
-
-        if httpResponse?.statusCode != 200 {
-            let errorMsg = json["error"] as? String ?? json["errorMsg"] as? String ?? json["message"] as? String ?? "Order failed"
-            throw ClobError.orderFailed(errorMsg)
-        }
-
-        return PlaceOrderResult(
-            success: json["success"] as? Bool ?? (json["orderID"] != nil),
-            orderId: json["orderID"] as? String,
-            status: json["status"] as? String
-        )
+        let raw = String(data: data, encoding: .utf8) ?? ""
+        print("[CLOB] updateBalanceAllowance(\(assetType)) response (\(httpResponse?.statusCode ?? 0)): \(raw)")
     }
 
     // MARK: - Get Market Info

@@ -1,5 +1,4 @@
 import SwiftUI
-import Charts
 
 struct EventDetailSheet: View {
     let event: Event
@@ -104,81 +103,20 @@ struct EventDetailSheet: View {
 
     // MARK: - Chart
     private var chartSection: some View {
-        Group {
-            if isLoadingChart {
-                ProgressView()
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 200)
-            } else if priceHistories.isEmpty {
-                Text("No chart data available")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 200)
-            } else {
-                chartView
-            }
-        }
+        LivelineMultiSeriesView(
+            series: livelineSeries,
+            isLoading: isLoadingChart,
+            height: 200
+        )
+        .padding(.horizontal, 16)
     }
 
-    private var chartView: some View {
-        Chart {
-            ForEach(Array(priceHistories.enumerated()), id: \.offset) { index, entry in
-                let color = chartColors[index % chartColors.count]
-                ForEach(entry.value) { point in
-                    LineMark(
-                        x: .value("Time", point.date),
-                        y: .value("Price", point.p * 100)
-                    )
-                    .foregroundStyle(color)
-                    .lineStyle(StrokeStyle(lineWidth: 2))
-                    .interpolationMethod(.catmullRom)
-                }
-                // End point dot + label
-                if let last = entry.value.last {
-                    PointMark(
-                        x: .value("Time", last.date),
-                        y: .value("Price", last.p * 100)
-                    )
-                    .foregroundStyle(color)
-                    .symbolSize(30)
-                    .annotation(position: .trailing, spacing: 4) {
-                        VStack(alignment: .leading, spacing: 0) {
-                            Text(entry.key)
-                                .font(.system(size: 9))
-                                .foregroundColor(color)
-                                .lineLimit(1)
-                            Text("\(Int(last.p * 100))%")
-                                .font(.system(size: 11, weight: .bold))
-                                .foregroundColor(color)
-                        }
-                    }
-                }
-            }
+    private var livelineSeries: [(label: String, data: [LivelineDataPoint], color: Color)] {
+        priceHistories.enumerated().map { index, entry in
+            let color = chartColors[index % chartColors.count]
+            let points = entry.value.map { $0.livelinePoint }
+            return (label: entry.key, data: points, color: color)
         }
-        .chartYScale(domain: 0...100)
-        .chartYAxis {
-            AxisMarks(position: .leading, values: [0, 25, 50, 75, 100]) { value in
-                AxisGridLine(stroke: StrokeStyle(lineWidth: 0.3))
-                AxisValueLabel {
-                    if let v = value.as(Int.self) {
-                        Text("\(v)")
-                            .font(.system(size: 9))
-                            .foregroundColor(.secondary)
-                    }
-                }
-            }
-        }
-        .chartXAxis {
-            AxisMarks(values: .automatic(desiredCount: 4)) { _ in
-                AxisGridLine(stroke: StrokeStyle(lineWidth: 0.3))
-                AxisValueLabel(format: .dateTime.month(.abbreviated).day())
-                    .font(.system(size: 9))
-            }
-        }
-        .frame(height: 200)
-        .padding(.leading, 16)
-        .padding(.trailing, 60)
     }
 
     // MARK: - Time Range
