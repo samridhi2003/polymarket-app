@@ -23,7 +23,6 @@ struct MarketsTabView: View {
                 }
             }
             .navigationTitle("Polymarket")
-            .searchable(text: $viewModel.searchText, prompt: "Search markets...")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { auth.logout() } label: {
@@ -41,6 +40,7 @@ struct MarketsTabView: View {
     private var mainContent: some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 16) {
+                searchBar
                 categoryChips
 
                 if viewModel.searchText.isEmpty {
@@ -54,6 +54,38 @@ struct MarketsTabView: View {
         .refreshable {
             await viewModel.loadMarkets()
         }
+    }
+
+    // MARK: - Search Bar
+    private var searchBar: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 16, weight: .medium))
+                .foregroundColor(.secondary)
+
+            TextField("Search markets...", text: $viewModel.searchText)
+                .font(.system(size: 16))
+                .autocorrectionDisabled()
+                #if os(iOS)
+                .textInputAutocapitalization(.never)
+                #endif
+
+            if !viewModel.searchText.isEmpty {
+                Button {
+                    viewModel.searchText = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 16))
+                        .foregroundColor(.secondary)
+                }
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
+        .background(Color(.tertiarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .padding(.horizontal, 16)
+        .padding(.top, 4)
     }
 
     // MARK: - Category Chips

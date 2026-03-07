@@ -4,6 +4,7 @@ import CoreImage.CIFilterBuiltins
 struct WalletTabView: View {
     @ObservedObject var viewModel: MarketViewModel
     @EnvironmentObject var auth: AuthManager
+    @Environment(\.openInAppBrowser) var openInAppBrowser
 
     @State private var showSendSheet = false
     @State private var showReceiveSheet = false
@@ -21,11 +22,11 @@ struct WalletTabView: View {
 
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: 24) {
-                        walletAddressSection
-                        balanceCard
+                        walletCard
+                        actionButtonsRow
                         positionsSection
                     }
-                    .padding(.bottom, 20)
+                    .padding(.bottom, 80)
                 }
             }
             .navigationTitle("Wallet")
@@ -42,6 +43,7 @@ struct WalletTabView: View {
             .sheet(isPresented: $showSendSheet) {
                 SendUSDCSheet(viewModel: viewModel)
                     .environmentObject(auth)
+                    .environment(\.openInAppBrowser, openInAppBrowser)
             }
             .sheet(isPresented: $showReceiveSheet) {
                 ReceiveSheet()
@@ -59,99 +61,153 @@ struct WalletTabView: View {
         }
     }
 
-    // MARK: - Wallet Address
-    private var walletAddressSection: some View {
-        Group {
-            if auth.isCreatingWallet {
-                HStack(spacing: 8) {
-                    ProgressView()
-                    Text("Creating wallet...")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(12)
-                .background(.ultraThinMaterial)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-                .padding(.horizontal, 16)
-                .padding(.top, 8)
-            } else if let address = auth.walletAddress {
-                HStack(spacing: 8) {
-                    Image(systemName: "link")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+    // MARK: - Wallet Card
 
-                    Text(truncateAddress(address))
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundColor(.secondary)
+    private var walletCard: some View {
+        ZStack {
+            // Card background
+            RoundedRectangle(cornerRadius: 22)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color(red: 0.33, green: 0.22, blue: 0.93),
+                            Color(red: 0.42, green: 0.32, blue: 1.0),
+                            Color(red: 0.36, green: 0.26, blue: 0.96)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .overlay(
+                    // Subtle noise/shimmer overlay
+                    RoundedRectangle(cornerRadius: 22)
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    Color.white.opacity(0.12),
+                                    Color.clear,
+                                    Color.white.opacity(0.06)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                )
+                .shadow(color: Color(red: 0.33, green: 0.22, blue: 0.93).opacity(0.45), radius: 24, y: 12)
+
+            // Card content
+            VStack(alignment: .leading, spacing: 0) {
+                // Top row: avatar + address
+                HStack(alignment: .top) {
+                    // Profile avatar
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [Color.white.opacity(0.3), Color.white.opacity(0.1)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 44, height: 44)
+                        .overlay(
+                            Image(systemName: "person.fill")
+                                .font(.system(size: 20, weight: .medium))
+                                .foregroundColor(.white.opacity(0.9))
+                        )
 
                     Spacer()
 
-                    Button {
-                        UIPasteboard.general.string = address
-                    } label: {
-                        Image(systemName: "doc.on.doc")
-                            .font(.caption)
-                            .foregroundColor(.blue)
+                    // Wallet address + copy
+                    if auth.isCreatingWallet {
+                        HStack(spacing: 6) {
+                            ProgressView()
+                                .tint(.white.opacity(0.7))
+                                .controlSize(.small)
+                            Text("Creating...")
+                                .font(.system(size: 13, weight: .medium, design: .monospaced))
+                                .foregroundColor(.white.opacity(0.7))
+                        }
+                    } else if let address = auth.walletAddress {
+                        HStack(spacing: 6) {
+                            Text(truncateAddress(address))
+                                .font(.system(size: 13, weight: .medium, design: .monospaced))
+                                .foregroundColor(.white.opacity(0.85))
+
+                            Button {
+                                UIPasteboard.general.string = address
+                            } label: {
+                                Image(systemName: "doc.on.doc.fill")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(.white.opacity(0.6))
+                                    .padding(6)
+                                    .background(Color.white.opacity(0.12))
+                                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                            }
+                        }
                     }
                 }
-                .padding(12)
-                .background(.ultraThinMaterial)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-                .padding(.horizontal, 16)
-                .padding(.top, 8)
-            }
-        }
-    }
 
-    // MARK: - Balance Card
-    private var balanceCard: some View {
-        VStack(spacing: 16) {
-            VStack(spacing: 4) {
-                Text("USDC Balance")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
+                Spacer()
 
-                if viewModel.isLoadingBalance {
-                    ProgressView()
-                        .frame(height: 48)
-                } else {
-                    Text("$\(String(format: "%.2f", viewModel.usdcBalance))")
-                        .font(.system(size: 40, weight: .bold, design: .rounded))
-                }
+                // Bottom section: name + balance
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Wallet")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(.white)
 
-                if viewModel.nativeBalance > 0 {
-                    Text("\(String(format: "%.4f", viewModel.nativeBalance)) POL")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            }
+                    if viewModel.isLoadingBalance {
+                        HStack(spacing: 8) {
+                            ProgressView()
+                                .tint(.white.opacity(0.7))
+                                .controlSize(.small)
+                            Text("Loading...")
+                                .font(.system(size: 15, weight: .medium))
+                                .foregroundColor(.white.opacity(0.6))
+                        }
+                    } else {
+                        HStack(alignment: .firstTextBaseline, spacing: 4) {
+                            Text("\(String(format: "%.2f", viewModel.usdcBalance))")
+                                .font(.system(size: 28, weight: .bold, design: .rounded))
+                                .foregroundColor(.white)
 
-            HStack(spacing: 12) {
-                actionButton(title: "Send", icon: "arrow.up.circle.fill", color: .blue) {
-                    showSendSheet = true
-                }
-                actionButton(title: "Receive", icon: "arrow.down.circle.fill", color: .green) {
-                    showReceiveSheet = true
-                }
-                actionButton(title: "Refresh", icon: "arrow.clockwise.circle.fill", color: .orange) {
-                    Task {
-                        if let address = auth.walletAddress {
-                            await viewModel.refreshBalance(walletAddress: address)
+                            Text("USDC")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundColor(.white.opacity(0.6))
+                        }
+
+                        if viewModel.nativeBalance > 0 {
+                            Text("\(String(format: "%.4f", viewModel.nativeBalance)) POL")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(.white.opacity(0.45))
                         }
                     }
                 }
             }
+            .padding(22)
         }
-        .frame(maxWidth: .infinity)
-        .padding(24)
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 24))
-        .overlay(
-            RoundedRectangle(cornerRadius: 24)
-                .stroke(Color.white.opacity(0.3), lineWidth: 0.5)
-        )
-        .shadow(color: .black.opacity(0.08), radius: 12, y: 4)
+        .frame(height: 200)
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
+    }
+
+    // MARK: - Action Buttons Row
+
+    private var actionButtonsRow: some View {
+        HStack(spacing: 12) {
+            actionButton(title: "Send", icon: "arrow.up.circle.fill", color: .blue) {
+                showSendSheet = true
+            }
+            actionButton(title: "Receive", icon: "arrow.down.circle.fill", color: .green) {
+                showReceiveSheet = true
+            }
+            actionButton(title: "Refresh", icon: "arrow.clockwise.circle.fill", color: .orange) {
+                Task {
+                    if let address = auth.walletAddress {
+                        await viewModel.refreshBalance(walletAddress: address)
+                    }
+                }
+            }
+        }
         .padding(.horizontal, 16)
     }
 
@@ -283,37 +339,128 @@ struct SendUSDCSheet: View {
     @ObservedObject var viewModel: MarketViewModel
     @EnvironmentObject var auth: AuthManager
     @Environment(\.dismiss) var dismiss
+    @Environment(\.openInAppBrowser) var openInAppBrowser
 
     @State private var recipientAddress = ""
     @State private var amount = ""
     @State private var isSending = false
+    @State private var sendStatus = ""
     @State private var txHash: String?
+    @State private var isConfirmed = false
     @State private var errorMsg: String?
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 20) {
-                if let txHash = txHash {
-                    // Success
-                    VStack(spacing: 12) {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 50))
-                            .foregroundColor(.green)
-                        Text("Transaction Sent!")
-                            .font(.title2).fontWeight(.bold)
-                        Text("Tx: \(txHash.prefix(10))...\(txHash.suffix(6))")
-                            .font(.caption).foregroundColor(.secondary)
+                if isSending || txHash != nil {
+                    // Sending / confirming / confirmed
+                    VStack(spacing: 16) {
+                        Spacer().frame(height: 20)
+
+                        if isConfirmed {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 56))
+                                .foregroundColor(.green)
+                        } else {
+                            ProgressView()
+                                .controlSize(.large)
+                        }
+
+                        Text(isConfirmed ? "Transaction Confirmed!" : sendStatus)
+                            .font(.title3).fontWeight(.semibold)
+                            .multilineTextAlignment(.center)
+
+                        if let txHash = txHash {
+                            VStack(spacing: 8) {
+                                Text("Tx: \(txHash.prefix(10))...\(txHash.suffix(6))")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+
+                                Button {
+                                    if let url = URL(string: "https://polygonscan.com/tx/\(txHash)") {
+                                        UIApplication.shared.open(url)
+                                    }
+                                } label: {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "arrow.up.right.square")
+                                            .font(.caption)
+                                        Text("View on Polygonscan")
+                                            .font(.subheadline)
+                                            .fontWeight(.medium)
+                                    }
+                                    .foregroundStyle(.blue)
+                                }
+                            }
+                        }
+
+                        if isConfirmed {
+                            Button {
+                                dismiss()
+                            } label: {
+                                Text("Done")
+                                    .fontWeight(.semibold)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 14)
+                                    .background(Color(.tertiarySystemGroupedBackground))
+                                    .foregroundStyle(.primary)
+                                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                            }
+                            .padding(.top, 8)
+                        }
                     }
-                    .padding(.top, 40)
+                } else if errorMsg != nil {
+                    // Error state with retry
+                    VStack(spacing: 16) {
+                        Spacer().frame(height: 20)
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 56))
+                            .foregroundColor(.red)
+                        Text("Transaction Failed")
+                            .font(.title3).fontWeight(.semibold)
+                        Text(errorMsg ?? "")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                        Button {
+                            errorMsg = nil
+                        } label: {
+                            Text("Try Again")
+                                .fontWeight(.semibold)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 14)
+                                .background(Color.blue)
+                                .foregroundColor(.white)
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                        }
+                    }
                 } else {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Recipient Address")
                             .font(.subheadline).foregroundColor(.secondary)
-                        TextField("0x...", text: $recipientAddress)
-                            .font(.system(.body, design: .monospaced))
-                            .padding()
-                            .background(.ultraThinMaterial)
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                        HStack(spacing: 8) {
+                            TextField("0x...", text: $recipientAddress)
+                                .font(.system(.body, design: .monospaced))
+                                #if os(iOS)
+                                .textInputAutocapitalization(.never)
+                                .keyboardType(.asciiCapable)
+                                #endif
+                                .autocorrectionDisabled()
+                                .textContentType(.none)
+                            Button {
+                                #if os(iOS)
+                                if let pasted = UIPasteboard.general.string {
+                                    recipientAddress = pasted.trimmingCharacters(in: .whitespacesAndNewlines)
+                                }
+                                #endif
+                            } label: {
+                                Image(systemName: "doc.on.clipboard")
+                                    .font(.body)
+                                    .foregroundStyle(.blue)
+                            }
+                        }
+                        .padding()
+                        .background(.ultraThinMaterial)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
                     }
 
                     VStack(alignment: .leading, spacing: 8) {
@@ -329,30 +476,18 @@ struct SendUSDCSheet: View {
                             .font(.caption).foregroundColor(.secondary)
                     }
 
-                    if let error = errorMsg {
-                        Text(error)
-                            .font(.caption)
-                            .foregroundColor(.red)
-                    }
-
                     Button {
                         Task { await sendUSDC() }
                     } label: {
-                        Group {
-                            if isSending {
-                                ProgressView().tint(.white)
-                            } else {
-                                Text("Send USDC")
-                                    .fontWeight(.semibold)
-                            }
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(canSend ? Color.blue : Color.gray.opacity(0.3))
-                        .foregroundColor(.white)
-                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                        Text("Send USDC")
+                            .fontWeight(.semibold)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 16)
+                            .background(canSend ? Color.blue : Color.gray.opacity(0.3))
+                            .foregroundColor(.white)
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
                     }
-                    .disabled(!canSend || isSending)
+                    .disabled(!canSend)
                 }
 
                 Spacer()
@@ -372,31 +507,48 @@ struct SendUSDCSheet: View {
     }
 
     private var canSend: Bool {
-        !recipientAddress.isEmpty &&
-        recipientAddress.hasPrefix("0x") &&
-        recipientAddress.count == 42 &&
-        (Double(amount) ?? 0) > 0
+        let trimmed = recipientAddress.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.count == 42 &&
+            trimmed.hasPrefix("0x") &&
+            (Double(amount) ?? 0) > 0
     }
 
     private func sendUSDC() async {
+        let trimmedAddress = recipientAddress.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let wallet = auth.embeddedWallet,
-              let sendAmount = Double(amount) else { return }
+              let sendAmount = Double(amount) else {
+            print("[Send] Missing wallet or invalid amount")
+            return
+        }
 
         isSending = true
         errorMsg = nil
+        isConfirmed = false
+        sendStatus = "Signing transaction..."
+
+        print("[Send] Sending \(sendAmount) USDC to \(trimmedAddress)")
 
         do {
+            sendStatus = "Sending transaction..."
             let hash = try await WalletService.shared.sendUSDC(
                 from: wallet,
-                to: recipientAddress,
+                to: trimmedAddress,
                 amount: sendAmount
             )
             txHash = hash
-            // Refresh balance after send
+            print("[Send] TX hash: \(hash)")
+
+            sendStatus = "Waiting for confirmation..."
+            try await WalletService.shared.waitForConfirmation(txHash: hash)
+
+            isConfirmed = true
+            print("[Send] Confirmed!")
+
             if let address = auth.walletAddress {
                 await viewModel.refreshBalance(walletAddress: address)
             }
         } catch {
+            print("[Send] Error: \(error)")
             errorMsg = error.localizedDescription
         }
         isSending = false

@@ -189,6 +189,11 @@ class WalletService {
         try await waitForTransaction(txHash: txHash)
     }
 
+    /// Poll until a transaction is mined (public alias)
+    func waitForConfirmation(txHash: String) async throws {
+        try await waitForTransaction(txHash: txHash)
+    }
+
     /// Poll until a transaction is mined
     private func waitForTransaction(txHash: String) async throws {
         guard let url = URL(string: polygonRPC) else { throw WalletError.invalidURL }
